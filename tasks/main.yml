@@ -1,0 +1,49 @@
+---
+# Set appropriate Drupal permissions
+
+# Initialisation
+
+- name: Setting vhost directory
+  set_fact: path="{{ drupal_sites[site][dest].path }}"
+
+- name: Checking Drupal installation
+  stat: path="{{ path }}/modules/system/system.module"
+  register: vhost_stat
+
+- name: Drupal installation is ok
+  fail: msg="Drupal installation on {{ path }} not detected."
+  when: not vhost_stat.stat.exists
+
+- name: Checking directory permissions
+  file: path="{{ path }}/ansible-check-perms" state=touch
+
+- name: Directory permissions ok
+  file: path="{{ path }}/ansible-check-perms" state=absent
+
+- name: Checking apache user
+  set_fact: apache_user="www-data"
+  when: apache_user is not defined
+
+# Permissions
+
+- name: Setting ownership
+  file: path="{{ path }}" owner="{{ ansible_user_id }}" group="{{ apache_user }}" recurse=yes
+  become: true
+
+- name: Setting permissions on all directories in root
+  command: find "{{ path }}" -type d -exec chmod u=rwx,g=rx,o= {} \;
+
+- name: Setting permissions on all files in root
+  command: find "{{ path }}" -type f -exec chmod u=rw,g=r,o= {} \;
+
+- name: Setting permissions on tmp directory
+  command: find "{{ path }}/tmp" -exec chmod ug=rwx,o= {} \;
+
+- name: Setting permissions on [files] directories in sites
+  command: find "{{ path }}/sites" -type d -name files -exec chmod ug=rwx,o= {} \;
+
+- name: Setting permissions on all files inside all [files] directories in sites
+  shell: find "{{ path }}/sites"  -name files -type d -exec find '{}' -type f \; | while read FILE; do chmod ug=rw,o= "$FILE"; done
+
+- name: Setting permissions on all directories inside all [files] directories in sites
+  shell: find "{{ path }}/sites"  -name files -type d -exec find '{}' -type d \; | while read DIR; do chmod ug=rwx,o= "$DIR"; done
